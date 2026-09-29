@@ -260,31 +260,4 @@ function esc(s) {
     return d.innerHTML;
 }
 
-function renderTopicScores() {
-    const metas = document.querySelectorAll('.tc-meta[id^="score_"]');
-    metas.forEach(meta => {
-        const idParts = meta.id.split('_'); 
-        if (idParts.length >= 3) {
-            const subj = idParts[1];
-            const tid = idParts[2];
-            if (subj === 'memory') return; // Skip memory subjects
-            const scoreStr = localStorage.getItem(`exam_score_${subj}_${tid}`);
-            if (scoreStr) {
-                const scoreNum = parseInt(scoreStr);
-                const isPass = scoreNum >= 60;
-                const badge = document.createElement('span');
-                badge.className = `score-badge ${isPass ? 'pass-b' : 'fail-b'}`;
-                badge.textContent = `ทำแล้วได้ ${scoreNum}%`;
-                meta.appendChild(badge);
-            }
-        }
-    });
-}
 
-// Initialize default mode
-if (document.getElementById('quizWrapper') && typeof questions !== 'undefined' && questions.length > 0) {
-    startQuiz();
-}
-
-// Render scores on topics page
-renderTopicScores();
