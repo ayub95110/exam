@@ -72,11 +72,14 @@ function initRouter() {
 function renderHome(container) {
     let gridHTML = '';
     for (const [sKey, sData] of Object.entries(DB.subjects)) {
-        let meta = 'สรุปสำคัญ';
+        let meta = '';
         if (sKey !== 'memory') {
             const tIds = Object.keys(sData.topics);
             const maxSets = Math.max(...tIds.map(t => Object.keys(getTopicSets(sKey, t)).length));
             meta = tIds.length + ' หัวข้อ · ' + maxSets + ' ชุด';
+        } else {
+            const tIds = Object.keys(sData.topics);
+            meta = tIds.length + ' หมวดสรุปสำคัญ';
         }
         gridHTML += `
             <a href="?page=topics&subject=${sKey}" class="home-subject-card card-${sData.color}" onclick="navigate(event, this.href)">
