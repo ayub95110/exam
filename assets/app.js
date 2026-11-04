@@ -68,7 +68,7 @@ const letters = ['ก', 'ข', 'ค', 'ง'];
 
 function loadProgress() {
     if (typeof currentSubjectKey === 'undefined' || !currentSubjectKey) return false;
-    const key = `exam_prog_${currentSubjectKey}_${currentTopicId}`;
+    const key = `exam_prog_${currentSubjectKey}_${currentTopicId}${setKeySuffix(currentSetId)}`;
     const data = localStorage.getItem(key);
     if (data) {
         try {
@@ -87,7 +87,7 @@ function loadProgress() {
 
 function saveProgress() {
     if (typeof currentSubjectKey === 'undefined' || !currentSubjectKey) return;
-    const key = `exam_prog_${currentSubjectKey}_${currentTopicId}`;
+    const key = `exam_prog_${currentSubjectKey}_${currentTopicId}${setKeySuffix(currentSetId)}`;
     const data = { currentQ, score, answered, quizFinished };
     localStorage.setItem(key, JSON.stringify(data));
 }
@@ -95,7 +95,7 @@ function saveProgress() {
 function startQuiz(reset = false) {
     if (reset) {
         if (typeof currentSubjectKey !== 'undefined') {
-            localStorage.removeItem(`exam_prog_${currentSubjectKey}_${currentTopicId}`);
+            localStorage.removeItem(`exam_prog_${currentSubjectKey}_${currentTopicId}${setKeySuffix(currentSetId)}`);
         }
     } else if (loadProgress()) {
         renderQuiz();
@@ -197,7 +197,7 @@ function prevQ() {
 }
 function saveScore() {
     if (typeof currentSubjectKey === 'undefined' || !currentSubjectKey) return;
-    const key = `exam_score_${currentSubjectKey}_${currentTopicId}`;
+    const key = `exam_score_${currentSubjectKey}_${currentTopicId}${setKeySuffix(currentSetId)}`;
     const pct = Math.round((score / questions.length) * 100);
     const existing = localStorage.getItem(key);
     if (!existing || parseInt(existing) < pct) {

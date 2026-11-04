@@ -2,6 +2,7 @@
 
 let currentSubjectKey = '';
 let currentTopicId = 0;
+let currentSetId = 1;
 let questions = [];
 
 // Ensure DB is loaded
@@ -15,11 +16,36 @@ function esc(s) {
     return d.innerHTML;
 }
 
+/**
+ * คืนค่าชุดข้อสอบทั้งหมดของหัวข้อ ในรูป { "1": [...], "2": [...] }
+ * รองรับทั้งข้อมูลแบบเดิม (array) และแบบใหม่ (object แยกชุด)
+ */
+function getTopicSets(subjectKey, topicId) {
+    const raw = DB.questions[subjectKey]?.[topicId];
+    if (!raw) return {};
+    if (Array.isArray(raw)) return { '1': raw };
+    return raw;
+}
+
+function getSetQuestions(subjectKey, topicId, setId) {
+    return getTopicSets(subjectKey, topicId)[setId] || [];
+}
+
+function setLabel(setId) {
+    return 'ชุด ' + String(setId).padStart(2, '0');
+}
+
+/** suffix ของ key ใน localStorage — ชุด 1 ใช้ key เดิม เพื่อไม่ให้คะแนน/ความคืบหน้าเก่าหาย */
+function setKeySuffix(setId) {
+    return String(setId) === '1' ? '' : `_s${setId}`;
+}
+
 function initRouter() {
     const params = new URLSearchParams(window.location.search);
     const page = params.get('page') || 'home';
     currentSubjectKey = params.get('subject') || '';
     currentTopicId = parseInt(params.get('topic')) || 0;
+    currentSetId = parseInt(params.get('set')) || 1;
 
     const container = document.getElementById('appContainer');
     if (!container) return;
@@ -32,10 +58,11 @@ function initRouter() {
     } else if (page === 'topics' && DB.subjects[currentSubjectKey]) {
         renderTopics(container);
     } else if (page === 'exam' && DB.subjects[currentSubjectKey] && DB.subjects[currentSubjectKey].topics[currentTopicId]) {
-        questions = DB.questions[currentSubjectKey]?.[currentTopicId] || [];
+        if (!getTopicSets(currentSubjectKey, currentTopicId)[currentSetId]) currentSetId = 1;
+        questions = getSetQuestions(currentSubjectKey, currentTopicId, currentSetId);
         renderExam(container);
     } else if (page === 'note' && DB.subjects[currentSubjectKey] && DB.subjects[currentSubjectKey].topics[currentTopicId]) {
-        questions = DB.questions[currentSubjectKey]?.[currentTopicId] || [];
+        questions = getSetQuestions(currentSubjectKey, currentTopicId, 1);
         renderNote(container);
     } else {
         renderHome(container);
@@ -45,7 +72,12 @@ function initRouter() {
 function renderHome(container) {
     let gridHTML = '';
     for (const [sKey, sData] of Object.entries(DB.subjects)) {
-        let meta = sKey === 'memory' ? 'สรุปสำคัญ' : (Object.keys(sData.topics).length + ' หัวข้อ');
+        let meta = 'สรุปสำคัญ';
+        if (sKey !== 'memory') {
+            const tIds = Object.keys(sData.topics);
+            const maxSets = Math.max(...tIds.map(t => Object.keys(getTopicSets(sKey, t)).length));
+            meta = tIds.length + ' หัวข้อ · ' + maxSets + ' ชุด';
+        }
         gridHTML += `
             <a href="?page=topics&subject=${sKey}" class="home-subject-card card-${sData.color}" onclick="navigate(event, this.href)">
                 <div class="hsc-emoji">${sData.emoji}</div>
@@ -73,36 +105,58 @@ function renderHome(container) {
     `;
 }
 
+function scoreBadgeHTML(subjectKey, topicId, setId) {
+    const scoreStr = localStorage.getItem(`exam_score_${subjectKey}_${topicId}${setKeySuffix(setId)}`);
+    if (!scoreStr) return '';
+    const scoreNum = parseInt(scoreStr);
+    const isPass = scoreNum >= 60;
+    return `<span class="score-badge ${isPass ? 'pass-b' : 'fail-b'}">ได้ ${scoreNum}%</span>`;
+}
+
 function renderTopics(container) {
     const subj = DB.subjects[currentSubjectKey];
     let gridHTML = '';
     
     for (const [tid, tData] of Object.entries(subj.topics)) {
-        let qCount = DB.questions[currentSubjectKey]?.[tid]?.length || 0;
-        let tMeta = currentSubjectKey === 'memory' ? 'หัวข้อย่อย' : 'ข้อ';
-        let targetPage = currentSubjectKey === 'memory' ? 'note' : 'exam';
-        
-        let scoreBadge = '';
-        if (currentSubjectKey !== 'memory') {
-            const scoreStr = localStorage.getItem(`exam_score_${currentSubjectKey}_${tid}`);
-            if (scoreStr) {
-                const scoreNum = parseInt(scoreStr);
-                const isPass = scoreNum >= 60;
-                scoreBadge = `<span class="score-badge ${isPass ? 'pass-b' : 'fail-b'}">ทำแล้วได้ ${scoreNum}%</span>`;
-            }
+        if (currentSubjectKey === 'memory') {
+            const qCount = getSetQuestions(currentSubjectKey, tid, 1).length;
+            gridHTML += `
+                <a href="?page=note&subject=${currentSubjectKey}&topic=${tid}" class="topic-card tc-${subj.color}" onclick="navigate(event, this.href)">
+                    <div class="tc-number">${tid}</div>
+                    <div class="tc-body">
+                        <div class="tc-icon">${tData.icon}</div>
+                        <h3 class="tc-title">${esc(tData.short)}</h3>
+                        <p class="tc-full">${esc(tData.title)}</p>
+                        <div class="tc-meta">${qCount} หัวข้อย่อย</div>
+                    </div>
+                    <div class="tc-arrow">→</div>
+                </a>
+            `;
+            continue;
+        }
+
+        const sets = getTopicSets(currentSubjectKey, tid);
+        let setsHTML = '';
+        for (const [sid, sQs] of Object.entries(sets)) {
+            setsHTML += `
+                <a href="?page=exam&subject=${currentSubjectKey}&topic=${tid}&set=${sid}" class="set-chip" onclick="navigate(event, this.href)">
+                    <span class="set-chip-label">📝 ${setLabel(sid)}</span>
+                    <span class="set-chip-count">${sQs.length} ข้อ</span>
+                    ${scoreBadgeHTML(currentSubjectKey, tid, sid)}
+                </a>
+            `;
         }
 
         gridHTML += `
-            <a href="?page=${targetPage}&subject=${currentSubjectKey}&topic=${tid}" class="topic-card tc-${subj.color}" onclick="navigate(event, this.href)">
+            <div class="topic-card has-sets tc-${subj.color}">
                 <div class="tc-number">${tid}</div>
                 <div class="tc-body">
                     <div class="tc-icon">${tData.icon}</div>
                     <h3 class="tc-title">${esc(tData.short)}</h3>
                     <p class="tc-full">${esc(tData.title)}</p>
-                    <div class="tc-meta">${qCount} ${tMeta} ${scoreBadge}</div>
+                    <div class="tc-sets">${setsHTML}</div>
                 </div>
-                <div class="tc-arrow">→</div>
-            </a>
+            </div>
         `;
     }
 
@@ -111,7 +165,7 @@ function renderTopics(container) {
             <div class="topics-header">
                 <a href="?page=home" class="back-link" onclick="navigate(event, this.href)">← กลับหน้าแรก</a>
                 <h2 class="topics-title">${subj.emoji} ${esc(subj.title)}</h2>
-                <p class="topics-desc">เลือกหัวข้อที่ต้องการฝึกทำข้อสอบ (${esc(subj.subtitle)})</p>
+                <p class="topics-desc">${currentSubjectKey === 'memory' ? 'เลือกหัวข้อที่ต้องการทบทวน' : 'เลือกหัวข้อและชุดข้อสอบที่ต้องการฝึกทำ'} (${esc(subj.subtitle)})</p>
             </div>
             <div class="topics-grid">
                 ${gridHTML}
@@ -120,9 +174,23 @@ function renderTopics(container) {
     `;
 }
 
+function renderSetTabs() {
+    const sets = getTopicSets(currentSubjectKey, currentTopicId);
+    const ids = Object.keys(sets);
+    if (ids.length < 2) return '';
+    let html = '<div class="set-tabs">';
+    ids.forEach(sid => {
+        const active = String(sid) === String(currentSetId);
+        html += `<a href="?page=exam&subject=${currentSubjectKey}&topic=${currentTopicId}&set=${sid}" class="set-tab ${active ? 'active' : ''}" onclick="navigate(event, this.href)">${setLabel(sid)}</a>`;
+    });
+    html += '</div>';
+    return html;
+}
+
 function renderExam(container) {
     const subj = DB.subjects[currentSubjectKey];
     const topic = subj.topics[currentTopicId];
+    const label = setLabel(currentSetId);
     
     let reviewHTML = '';
     questions.forEach((q, idx) => {
@@ -170,20 +238,23 @@ function renderExam(container) {
                 <span class="bc-sep">›</span>
                 <a href="?page=topics&subject=${currentSubjectKey}" onclick="navigate(event, this.href)">${esc(subj.subtitle)}</a>
                 <span class="bc-sep">›</span>
-                <span class="bc-current">${esc(topic.short)}</span>
+                <span class="bc-current">${esc(topic.short)} ${label}</span>
             </div>
             <div class="exam-header eh-${subj.color}">
                 <div class="eh-left">
                     <div class="eh-icon">${topic.icon}</div>
                     <div>
-                        <h2 class="eh-title">${esc(topic.short)}</h2>
+                        <h2 class="eh-title">${esc(topic.short)} <span class="eh-set">${label}</span></h2>
                         <p class="eh-desc">${esc(topic.title)}</p>
                         <p class="eh-count">${questions.length} ข้อ</p>
                     </div>
                 </div>
-                <div class="mode-tabs">
-                    <button class="mode-tab" id="tabReview" onclick="switchMode('review')">📄 ดูเฉลย</button>
-                    <button class="mode-tab active" id="tabQuiz" onclick="switchMode('quiz')">✏️ ทำข้อสอบ</button>
+                <div class="eh-right">
+                    ${renderSetTabs()}
+                    <div class="mode-tabs">
+                        <button class="mode-tab" id="tabReview" onclick="switchMode('review')">📄 ดูเฉลย</button>
+                        <button class="mode-tab active" id="tabQuiz" onclick="switchMode('quiz')">✏️ ทำข้อสอบ</button>
+                    </div>
                 </div>
             </div>
             <div id="reviewMode" style="display:none">
@@ -268,14 +339,29 @@ function renderTopicNav(forcedPage) {
     
     let html = '<div class="topic-nav">';
     let tPage = forcedPage || 'exam';
+
+    // หน้าข้อสอบ: เลื่อนไปหัวข้อก่อน/ถัดไป โดยคงชุดเดิมไว้ (ถ้ามี)
+    const linkFor = (tid) => {
+        let url = `?page=${tPage}&subject=${currentSubjectKey}&topic=${tid}`;
+        let text = esc(subj.topics[tid].short);
+        if (tPage === 'exam') {
+            const sid = getTopicSets(currentSubjectKey, tid)[currentSetId] ? currentSetId : 1;
+            url += `&set=${sid}`;
+            text += ` ${setLabel(sid)}`;
+        }
+        return { url, text };
+    };
+
     if (prevTopic) {
-        html += `<a href="?page=${tPage}&subject=${currentSubjectKey}&topic=${prevTopic}" class="tn-link tn-prev" onclick="navigate(event, this.href)">← ${esc(subj.topics[prevTopic].short)}</a>`;
+        const l = linkFor(prevTopic);
+        html += `<a href="${l.url}" class="tn-link tn-prev" onclick="navigate(event, this.href)">← ${l.text}</a>`;
     } else {
         html += '<span></span>';
     }
     
     if (nextTopic) {
-        html += `<a href="?page=${tPage}&subject=${currentSubjectKey}&topic=${nextTopic}" class="tn-link tn-next" onclick="navigate(event, this.href)">${esc(subj.topics[nextTopic].short)} →</a>`;
+        const l = linkFor(nextTopic);
+        html += `<a href="${l.url}" class="tn-link tn-next" onclick="navigate(event, this.href)">${l.text} →</a>`;
     }
     html += '</div>';
     
