@@ -1,0 +1,19 @@
+{
+  "name": "ระบบจำลองข้อสอบ นักวิชาการคอมพิวเตอร์",
+  "short_name": "จำลองข้อสอบ",
+  "description": "ระบบจำลองข้อสอบเตรียมสอบแข่งขัน ภาค ก. และ ภาค ข. ใช้งานได้แบบออฟไลน์ 100%",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
